@@ -12,6 +12,8 @@
 
 static const char PROMPT[] = "> ";
 
+// timer callback, called each 200 ms for establ;ished connection
+// after all commands have been parsed
 static void client_timeout_cb(evutil_socket_t fd, short event, void *user_data) {
     struct client_data *cdata = (struct client_data*)user_data;
     if(!cdata->command_mode) {
@@ -28,6 +30,7 @@ static void client_timeout_cb(evutil_socket_t fd, short event, void *user_data) 
     }
 }
 
+// command parser, easy state machine
 static command_t parse_command(char* line, struct client_data *cdata) {
     char *p, *token, *saveptr;
     int index;
@@ -109,6 +112,7 @@ static command_t parse_command(char* line, struct client_data *cdata) {
     return cmd;
 }
 
+// write data from client callback, called when there are some data to send available
 static void client_write_cb(struct bufferevent *bev, void *user_data) {
     struct client_data *cdata = (struct client_data*)user_data;
     printf("%s: %p\n", __func__, user_data);
@@ -125,7 +129,7 @@ static void client_write_cb(struct bufferevent *bev, void *user_data) {
     else bufferevent_flush(bev, EV_WRITE, BEV_NORMAL);
 }
 
-
+// read data from client callback.
 static void client_read_cb(struct bufferevent *bev, void *user_data) {
     struct client_data *cdata = (struct client_data*)user_data;
     struct evbuffer *src;
@@ -172,6 +176,7 @@ static void client_read_cb(struct bufferevent *bev, void *user_data) {
     }
 }
 
+// error processing callback
 static void client_event_cb(struct bufferevent *bev, short events, void *user_data) {
     struct client_data *cdata = (struct client_data*)user_data;
     puts(__func__);
@@ -187,6 +192,7 @@ static void client_event_cb(struct bufferevent *bev, short events, void *user_da
     }
 }
 
+// TERM signal handler 
 static void signal_cb(evutil_socket_t sig, short events, void *user_data) {
 	struct event_base *base = user_data;
 	struct timeval delay = {1, 0};
@@ -195,6 +201,7 @@ static void signal_cb(evutil_socket_t sig, short events, void *user_data) {
 	event_base_loopexit(base, &delay);
 }
 
+// listener callback, called by listener for each new connection
 static void listener_cb(struct evconnlistener *listener, evutil_socket_t fd,
                         struct sockaddr *sa, int socklen, void *user_data)
 {
@@ -242,13 +249,15 @@ int main(int ac, char **av) {
         fprintf(stderr, "Usage: %s <port>\n", av[0]);
         return EINVAL;
     }
-    
+
+    // allocate event base
     base = event_base_new();
 	if (!base) {
 		fprintf(stderr, "Could not initialize libevent!\n");
 		return ECANCELED;
 	}
 
+    // setup listening socket
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = INADDR_ANY;
@@ -264,6 +273,7 @@ int main(int ac, char **av) {
 		return ECANCELED;
 	}
 
+    // setup TERM signal handler
 	signal_event = evsignal_new(base, SIGINT, signal_cb, (void*)base);
 	if (!signal_event || event_add(signal_event, NULL) < 0) {
 		fprintf(stderr, "Could not create/add a signal event!\n");
@@ -272,6 +282,7 @@ int main(int ac, char **av) {
 		return ECANCELED;
 	}
 
+    // main event loop
 	event_base_dispatch(base);
 
 	evconnlistener_free(listener);
